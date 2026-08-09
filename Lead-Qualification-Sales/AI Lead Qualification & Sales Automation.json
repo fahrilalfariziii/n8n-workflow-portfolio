@@ -1,0 +1,637 @@
+{
+  "name": "AI Lead Qualification & Sales Automation",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "9acd3173-04cd-4cf2-b12c-53d8cb1bfcf0",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        32
+      ],
+      "id": "7e93c20c-09f5-4f7a-b9d8-39bddb8638b9",
+      "name": "Webhook",
+      "webhookId": "9acd3173-04cd-4cf2-b12c-53d8cb1bfcf0"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        176
+      ],
+      "id": "6ccc5e9d-fb89-42f4-8c03-92dbc4788ac1",
+      "name": "Telegram Trigger",
+      "webhookId": "a48c9723-4c55-4883-a0c8-4df167bc715d",
+      "credentials": {
+        "telegramApi": {
+          "id": "m9Wjg2bsEwvOsO0E",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9f20a03b-6903-48b5-98bd-c9fedd0cfaa4",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        176
+      ],
+      "id": "6ebbc816-b0db-4b3b-bddb-b35263bcd796",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama-3.3-70b-versatile\",\n  \"temperature\": 0.1,\n  \"response_format\": { \"type\": \"json_object\" },\n  \"messages\": [\n    {\n      \"role\": \"system\",\n      \"content\": \"Anda adalah AI Business Development / Sales Qualification Engine. Misi Anda adalah menganalisis data lead dan menghasilkan JSON valid tanpa markdown.\\n\\nAturan Scoring (0-100):\\n- 80-100 (HOT): Ada budget, project mendesak, profil perusahaan/bisnis jelas.\\n- 50-79 (WARM): Tertarik, bertanya harga/portofolio, namun belum ada keputusan waktu/budget fix.\\n- 0-49 (COLD): Spam, pertanyaan umum, atau di luar jangkauan produk.\\n\\nWajib format JSON:\\n{\\n  \\\"qualification_score\\\": number,\\n  \\\"category\\\": \\\"HOT\\\" | \\\"WARM\\\" | \\\"COLD\\\",\\n  \\\"ai_summary\\\": \\\"string\\\",\\n  \\\"recommended_action\\\": \\\"string\\\"\\n}\"\n    },\n    {\n      \"role\": \"user\",\n      \"content\": \"Lead Data:\\nNama: {{ $json.clean_data.full_name }}\\nEmail: {{ $json.clean_data.email }}\\nTelepon: {{ $json.clean_data.phone }}\\nPerusahaan: {{ $json.clean_data.company }}\\nChannel: {{ $json.clean_data.source_channel }}\\nPesan: {{ $json.clean_data.raw_message }}\"\n    }\n  ]\n}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        80
+      ],
+      "id": "9e52ce4a-1942-4404-ad66-99b0d0ab5346",
+      "name": "HTTP Request",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Fdm3ZYuXWyKChqcE",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const responseText = $json.choices[0].message.content;\nconst aiData = JSON.parse(responseText);\nconst previousCleanData = $node[\"Data Standardizer\"].json.clean_data;\n\nreturn {\n  ...previousCleanData,\n  qualification_score: aiData.qualification_score,\n  category: aiData.category,\n  ai_summary: aiData.ai_summary,\n  recommended_action: aiData.recommended_action\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        896,
+        80
+      ],
+      "id": "dcc89660-2ce5-4191-aec8-8440adc0b716",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "tableId": "leads",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "full_name",
+              "fieldValue": "={{ $json.full_name }}"
+            },
+            {
+              "fieldId": "email",
+              "fieldValue": "={{ $json.email }}"
+            },
+            {
+              "fieldId": "phone",
+              "fieldValue": "={{ $json.phone }}"
+            },
+            {
+              "fieldId": "company",
+              "fieldValue": "={{ $json.company }}"
+            },
+            {
+              "fieldId": "source_channel",
+              "fieldValue": "={{ $json.source_channel }}"
+            },
+            {
+              "fieldId": "raw_message",
+              "fieldValue": "={{ $json.raw_message }}"
+            },
+            {
+              "fieldId": "qualification_score",
+              "fieldValue": "={{ $json.qualification_score }}"
+            },
+            {
+              "fieldId": "category",
+              "fieldValue": "={{ $json.category }}"
+            },
+            {
+              "fieldId": "ai_summary",
+              "fieldValue": "={{ $json.ai_summary }}"
+            },
+            {
+              "fieldId": "recommended_action",
+              "fieldValue": "={{ $json.recommended_action }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        80
+      ],
+      "id": "c68c1bf9-c1f7-4c6d-8804-bc8273907e51",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "OIXW229L9IMD7RKz",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mengambil data dari Webhook (mengecek $json.body terlebih dahulu)\nconst payload = $json.body || $json;\n\n// Function Helpers\nfunction cleanPhone(phone) {\n  if (!phone) return \"\";\n  let cleaned = String(phone).replace(/[^0-9+]/g, '');\n  if (cleaned.startsWith('08')) cleaned = '+628' + cleaned.slice(2);\n  return cleaned;\n}\n\nfunction validateEmail(email) {\n  if (!email) return false;\n  const re = /^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/;\n  return re.test(String(email).trim().toLowerCase());\n}\n\n// Extraction Data (Support baik dari Webhook Body maupun Telegram)\nlet rawName = payload.name || payload.first_name || (payload.from ? `${payload.from.first_name} ${payload.from.last_name || ''}` : \"Unknown\");\nlet rawEmail = payload.email || \"\";\nlet rawPhone = payload.phone || \"\";\nlet message = payload.message || payload.text || \"\";\nlet company = payload.company || \"N/A\";\nlet channel = payload.from ? \"Telegram\" : \"Website Form\";\n\n// Cleaning & Validation\nlet cleanEmailVal = rawEmail ? rawEmail.trim().toLowerCase() : \"\";\nlet cleanPhoneNum = cleanPhone(rawPhone);\nlet isValidEmail = validateEmail(cleanEmailVal);\nlet isValidMessage = (message.trim().length >= 10);\n\nlet isValid = isValidEmail && isValidMessage;\n\nreturn [{\n  json: {\n    is_valid: isValid,\n    clean_data: {\n      full_name: String(rawName).trim(),\n      email: isValidEmail ? cleanEmailVal : null,\n      phone: cleanPhoneNum,\n      company: company,\n      source_channel: channel,\n      raw_message: message\n    },\n    error: !isValidEmail ? \"Invalid Email\" : (!isValidMessage ? \"Message too short\" : null)\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        176
+      ],
+      "id": "9fe1b559-8b9b-40ea-b3a7-9db4b4ef7191",
+      "name": "Data Standardizer"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "HOT",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "744ddb8c-fdfb-4832-974b-8d2cf3076759"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "4ca996f7-9d6e-4598-9e12-7e8f6ef1d5f1",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "WARM",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "43bcc845-3661-4f03-9905-435bba6f046c",
+                    "leftValue": "={{ $json.category }}",
+                    "rightValue": "COLD",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1344,
+        64
+      ],
+      "id": "334e121c-bca3-4fd0-8088-599d3a4cd913",
+      "name": "Switch"
+    },
+    {
+      "parameters": {
+        "chatId": "-10039058549333",
+        "text": "=🔥 *HOT LEAD DETECTED!* 🔥  👤 *Nama*: {{ $json.full_name }} 🏢 *Perusahaan*: {{ $json.company }} 📧 *Email*: {{ $json.email }} 📞 *WhatsApp/HP*: {{ $json.phone }} 📊 *Score*: {{ $json.qualification_score }}/100  📝 *Summary*: {{ $json.ai_summary }}  💡 *Rekomendasi Tindakan*: {{ $json.recommended_action }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1568,
+        -192
+      ],
+      "id": "5ab1aa1f-f108-4999-81c9-03fcf7e0b4bf",
+      "name": "Send a text message",
+      "webhookId": "d0295146-abd0-47a0-8dff-1834b5dc4749",
+      "credentials": {
+        "telegramApi": {
+          "id": "m9Wjg2bsEwvOsO0E",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BNEE9HKFF",
+          "mode": "list",
+          "cachedResultName": "workflow-test"
+        },
+        "text": "=New HOT Lead from {{ $json.company }} ({{ $json.full_name }}). Score: {{ $json.qualification_score }}. Check HubSpot immediately!",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        1568,
+        -32
+      ],
+      "id": "b505fb01-b12c-4dfb-86b1-7ff22bc54924",
+      "name": "Send a message",
+      "webhookId": "68cacf78-4b6e-4a48-a111-d94bdcbc99f4",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "71BhGPGURusSzzgP",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.email }}",
+        "subject": "=Terima Kasih Telah Menghubungi Kami - {{ $json.company }}",
+        "emailType": "text",
+        "message": "=Halo {{ $json.full_name }},  \n\nTerima kasih telah tertarik dengan layanan kami. Kami telah mencatat kebutuhan Anda: \"{{ $json.ai_summary }}\"  \n\nTim kami telah menyusun penawaran awal yang relevan. Apakah ada waktu luang di minggu ini untuk berdiskusi singkat via Zoom?  Salam, Sales & Business Development Team",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        144
+      ],
+      "id": "b2b9bf65-bedb-4539-85cf-c19141664d9a",
+      "name": "Send a message1",
+      "webhookId": "40bb6de2-d00f-453a-8013-9d2e79328ae6",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "pk7HRnAQ2mub2WSd",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "qualification_logs",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "lead_id",
+              "fieldValue": "={{ $('Create a row').item.json.id }}"
+            },
+            {
+              "fieldId": "execution_status",
+              "fieldValue": "PROCESSED_COLD"
+            },
+            {
+              "fieldId": "error_message",
+              "fieldValue": "=Low qualification score ({{ $json.qualification_score }})"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1568,
+        496
+      ],
+      "id": "231bbcf2-5a0a-4daa-9be0-efab17cc39c9",
+      "name": "Create a row1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "OIXW229L9IMD7RKz",
+          "name": "Supabase account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "oAuth2",
+        "select": "channel",
+        "channelId": {
+          "__rl": true,
+          "value": "C0BNEE9HKFF",
+          "mode": "list",
+          "cachedResultName": "workflow-test"
+        },
+        "text": "=New message error {{ $json.company }} ({{ $json.full_name }}). Score: {{ $json.qualification_score }}. Check data immediately! {{ $('Webhook').item.json.webhookUrl }}",
+        "otherOptions": {}
+      },
+      "type": "n8n-nodes-base.slack",
+      "typeVersion": 2.5,
+      "position": [
+        672,
+        272
+      ],
+      "id": "f6b4f32d-b488-47a3-9d90-c19c7ce2b25b",
+      "name": "Send a message2",
+      "webhookId": "de2d1c4a-f77b-4672-8c19-db521cbfe056",
+      "credentials": {
+        "slackOAuth2Api": {
+          "id": "71BhGPGURusSzzgP",
+          "name": "Slack account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": [
+            {
+              "mode": "everyMinute"
+            }
+          ]
+        },
+        "filters": {
+          "readStatus": "unread"
+        }
+      },
+      "type": "n8n-nodes-base.gmailTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        336
+      ],
+      "id": "5b286ae2-aac9-4022-9624-e1181b5e860c",
+      "name": "Gmail Trigger",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "pk7HRnAQ2mub2WSd",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "7e97e134-d15e-43ee-a23e-bff22b979037",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        496
+      ],
+      "id": "5633e17f-0b5a-4e57-b196-20b1f9480081",
+      "name": "WhatsApp",
+      "webhookId": "7e97e134-d15e-43ee-a23e-bff22b979037"
+    },
+    {
+      "parameters": {
+        "email": "={{ $json.email }}",
+        "additionalFields": {
+          "companyName": "={{ $json.company }}",
+          "firstName": "={{ $json.full_name }}",
+          "memberEmail": "={{ $json.email }}"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.hubspot",
+      "typeVersion": 2.2,
+      "position": [
+        1568,
+        304
+      ],
+      "id": "91abe0c6-4750-439f-a16f-9ededc296721",
+      "name": "Create or update a contact"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Data Standardizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Data Standardizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Data Standardizer": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a message1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create or update a contact",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create a row1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gmail Trigger": {
+      "main": [
+        [
+          {
+            "node": "Data Standardizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp": {
+      "main": [
+        [
+          {
+            "node": "Data Standardizer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "44965874-b582-47e9-93fa-e5a52e3a1e07",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "02bc9c5a7e42c093756a333fe09ba611fd55c871e427d7f1f0a8ef7a7b25630c"
+  },
+  "nodeGroups": [],
+  "id": "Cel8oCZhTcQ8sTWR",
+  "tags": []
+}

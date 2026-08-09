@@ -1,0 +1,628 @@
+{
+  "name": "AI Employee Helpdesk & IT Ticket Routing + RAG",
+  "nodes": [
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        -48,
+        -416
+      ],
+      "id": "5b1702be-9707-4e2e-8bf3-2bd1be0c3cbb",
+      "name": "Telegram Trigger",
+      "webhookId": "b9026358-bec4-4704-b020-e87c5ddac73f",
+      "credentials": {
+        "telegramApi": {
+          "id": "m9Wjg2bsEwvOsO0E",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "TICKET",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c400424f-d69e-49e6-9bd1-7931efa4b6bd"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "id": "dc1b2e70-cc2d-437b-a827-92d2c1600d11",
+                    "leftValue": "={{ $json.intent }}",
+                    "rightValue": "QUESTION",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        576,
+        -544
+      ],
+      "id": "d5e6fddb-4f76-4e9c-9457-21e82b00c1af",
+      "name": "Switch",
+      "alwaysOutputData": false
+    },
+    {
+      "parameters": {
+        "jsCode": "// 1. Ambil teks JSON dari property \"text\" (bukan choices[0].message.content)\nlet rawContent = $input.first().json.text || \"\";\n\n// 2. Clean-up jika LLM membungkus dengan markdown codeblock (```json ... ```)\nif (rawContent.includes(\"```\")) {\n  rawContent = rawContent.replace(/```json/gi, \"\").replace(/```/g, \"\").trim();\n}\n\n// 3. Parse string menjadi Object JSON\nlet parsedAI = {};\ntry {\n  parsedAI = JSON.parse(rawContent);\n} catch (e) {\n  // Fallback default jika LLM tidak mengembalikan valid JSON\n  parsedAI = {\n    category: \"Software\",\n    priority: \"P3\",\n    summary: \"Kendala dilaporkan pengguna\",\n    suggested_action: \"Lakukan verifikasi awal kendala pengguna.\",\n    assigned_team: \"Helpdesk General\"\n  };\n}\n\n// 4. Generate Ticket ID Format: IT-YYYY-XXXX\nconst year = new Date().getFullYear();\nconst randomNum = Math.floor(1000 + Math.random() * 9000);\nconst ticketId = `IT-${year}-${randomNum}`;\n\n// 5. Ambil data awal dari Telegram Trigger\nconst telegramTrigger = $('Telegram Trigger').first().json;\nconst telegramChatId = telegramTrigger.message?.chat?.id || telegramTrigger.message?.from?.id;\nconst rawIssue = telegramTrigger.message?.text || \"\";\n\nreturn [{\n  json: {\n    ticket_id: ticketId,\n    telegram_chat_id: telegramChatId,\n    raw_issue: rawIssue,\n    category: parsedAI.category,\n    priority: parsedAI.priority,\n    summary: parsedAI.summary,\n    suggested_action: parsedAI.suggested_action,\n    assigned_team: parsedAI.assigned_team,\n    status: 'OPEN'\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        -640
+      ],
+      "id": "4e4dc0b1-4a80-42c4-b203-49eb74dabbaa",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "tableId": "tickets",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "ticket_id",
+              "fieldValue": "={{ $json.ticket_id }}"
+            },
+            {
+              "fieldId": "telegram_chat_id",
+              "fieldValue": "={{ $json.telegram_chat_id }}"
+            },
+            {
+              "fieldId": "raw_issue",
+              "fieldValue": "={{ $json.raw_issue }}"
+            },
+            {
+              "fieldId": "category",
+              "fieldValue": "={{ $json.category }}"
+            },
+            {
+              "fieldId": "priority",
+              "fieldValue": "={{ $json.priority }}"
+            },
+            {
+              "fieldId": "summary",
+              "fieldValue": "={{ $json.summary }}"
+            },
+            {
+              "fieldId": "suggested_action",
+              "fieldValue": "={{ $json.suggested_action }}"
+            },
+            {
+              "fieldId": "assigned_team",
+              "fieldValue": "={{ $json.assigned_team }}"
+            },
+            {
+              "fieldId": "status",
+              "fieldValue": "={{ $json.status }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1248,
+        -640
+      ],
+      "id": "a2a02ac3-f954-43ba-8ed4-bf3f9461182c",
+      "name": "Create a row",
+      "credentials": {
+        "supabaseApi": {
+          "id": "NYAD8tCVQjs5flWM",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $json.telegram_chat_id }}",
+        "text": "=🎟️ **Tiket IT Berhasil Dibuat!**  \n\n📌 **ID Tiket:** {{ $json.ticket_id }} \n📂 **Kategori:** {{ $json.category }} \n⚡ **Prioritas:** {{ $json.priority }} \n👥 **Tim Penangani:** {{ $json.assigned_team }}  \n📝 **Ringkasan:** {{ $json.summary }}  \n\n💡 **Saran Tindakan Awal (Untuk Teknisi):** _{{ $json.suggested_action }}_  \n\nTim IT kami telah menerima laporan ini dan akan segera menindaklanjutinya.",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1456,
+        -640
+      ],
+      "id": "77c47cf9-ec12-4dd7-8c10-dc1a6e1fd63d",
+      "name": "Send a text message",
+      "webhookId": "c36f3ce8-edd8-4fa8-9025-48c9f01c0e41",
+      "credentials": {
+        "telegramApi": {
+          "id": "m9Wjg2bsEwvOsO0E",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "modelName": "sentence-transformers/all-mpnet-base-v2",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsHuggingFaceInference",
+      "typeVersion": 1,
+      "position": [
+        1008,
+        80
+      ],
+      "id": "60555a45-ea6f-449e-a065-022e1ec92026",
+      "name": "Embeddings HuggingFace Inference1",
+      "credentials": {
+        "huggingFaceApi": {
+          "id": "qvUe68h0TMojzhhA",
+          "name": "Hugging Face account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "llama-3.1-8b-instant",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        560,
+        -112
+      ],
+      "id": "501a9338-f3a8-47c4-9c63-e2a75a311276",
+      "name": "Groq Chat Model1",
+      "credentials": {
+        "groqApi": {
+          "id": "tgo2p85tXR2LrFLQ",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Wajib digunakan untuk mencari informasi, panduan, SOP, cara reset password, VPN, WiFi, printer, akses GitLab, dan aturan IT internal perusahaan.",
+        "pineconeIndex": {
+          "__rl": true,
+          "value": "it-knowledge-base",
+          "mode": "list",
+          "cachedResultName": "it-knowledge-base"
+        },
+        "topK": 3,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStorePinecone",
+      "typeVersion": 1.3,
+      "position": [
+        784,
+        -80
+      ],
+      "id": "4510b996-7fc5-455f-a005-ba9cd845f804",
+      "name": "Pinecone Vector Store1",
+      "credentials": {
+        "pineconeApi": {
+          "id": "pmMvJiB6yY7Ulr09",
+          "name": "Pinecone account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').first().json.message.chat.id }}",
+        "text": "={{ $json.output }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1088,
+        -432
+      ],
+      "id": "e37a56d5-8a9c-4ada-bada-228009a2364e",
+      "name": "Send a text message1",
+      "webhookId": "c3db0c66-b0a2-472f-ba03-386ce5e5f2c0",
+      "credentials": {
+        "telegramApi": {
+          "id": "m9Wjg2bsEwvOsO0E",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "tableId": "ai_interaction_logs",
+        "fieldsUi": {
+          "fieldValues": [
+            {
+              "fieldId": "telegram_chat_id",
+              "fieldValue": "={{ $('Telegram Trigger').first().json.message.chat.id }}"
+            },
+            {
+              "fieldId": "intent",
+              "fieldValue": "={{ $('Code in JavaScript1').first().json.intent }}"
+            },
+            {
+              "fieldId": "user_query",
+              "fieldValue": "={{ $('Telegram Trigger').first().json.message.text }}"
+            },
+            {
+              "fieldId": "ai_response",
+              "fieldValue": "={{ $json.output }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [
+        1088,
+        -256
+      ],
+      "id": "55c6ea0e-9576-4b25-826c-c58f3dfafc36",
+      "name": "Create a row1",
+      "credentials": {
+        "supabaseApi": {
+          "id": "NYAD8tCVQjs5flWM",
+          "name": "Supabase account 2"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        96,
+        -240
+      ],
+      "id": "99846185-47d5-4ea0-95ec-f7b3e7eca1cb",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "tgo2p85tXR2LrFLQ",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Telegram Trigger').first().json.message?.text }}",
+        "options": {
+          "systemMessage": "=Anda adalah AI IT Assistant internal perusahaan. \n\nSaat memanggil Tool Pinecone Vector Store, gunakan teks query pencarian dalam Bahasa Indonesia sesuai konteks asli pertanyaan pengguna.\n\nTUGAS UTAMA:\nSebelum menjawab pertanyaan pengguna, Anda WAJIB memanggil Tool Pinecone Vector Store untuk mencari dokumen dokumentasi IT internal yang relevan dengan pertanyaan pengguna.\n\nATURAN KERJA:\n1. JANGAN PERNAH menjawab langsung dari pengetahuan bawaan Anda tanpa melakukan pencarian ke Tool Pinecone terlebih dahulu.\n2. Gunakan hasil pencarian dari Tool Pinecone sebagai satu-satunya sumber kebenaran (Source of Truth).\n3. Jika informasi TIDAK DITEMUKAN di dalam Tool Pinecone setelah Anda cari, jawab dengan sopan:\n   \"Maaf, saya tidak menemukan informasi tersebut dalam dokumentasi internal kami. Apakah Anda ingin dibuatkan tiket masalah ke Tim IT?\"\n4. Jawablah menggunakan bahasa Indonesia yang ramah, sopan, dan terstruktur."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        720,
+        -336
+      ],
+      "id": "f3a55588-facd-495f-a1a0-cb177a2ab9b5",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Telegram Trigger').item.json.message.text }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "=You are an expert IT Service Management (ITSM) Classifier. Analyze the user issue and categorize it.  Rules for Category & Assignment: - Hardware -> Assigned: Hardware Team - Software -> Assigned: Software Team - Network -> Assigned: Network Team - Access Request -> Assigned: Access Request Team - Security -> Assigned: Security Team  Rules for Priority: - P1: Total system down, critical security breach. - P2: Employee cannot work completely (WiFi disconnect, Laptop dead, VPN locked). - P3: Minor issue, software bug, standard access request. - P4: Inquiry or general feature request.  Respond strictly in JSON format: {   \"category\": \"Hardware\" | \"Software\" | \"Network\" | \"Access Request\" | \"Security\",   \"priority\": \"P1\" | \"P2\" | \"P3\" | \"P4\",   \"summary\": \"<1 sentence brief summary in English>\",   \"suggested_action\": \"<1-2 sentences initial troubleshooting steps for technicians>\",   \"assigned_team\": \"Hardware Team\" | \"Software Team\" | \"Network Team\" | \"Access Request Team\" | \"Security Team\" }"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        752,
+        -640
+      ],
+      "id": "8f19d4cf-28ad-4ef2-8655-44d11581097e",
+      "name": "Basic LLM Chain1"
+    },
+    {
+      "parameters": {
+        "model": "llama-3.3-70b-versatile",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        752,
+        -496
+      ],
+      "id": "40f0fcb4-5f4c-4f75-a97c-4ba0b869d843",
+      "name": "Groq Chat Model2",
+      "credentials": {
+        "groqApi": {
+          "id": "tgo2p85tXR2LrFLQ",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "path": "a49b7138-9a1d-4475-b08d-aaf8e5eb6ee6",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -48,
+        -560
+      ],
+      "id": "d8c78e73-3f77-4c20-8781-24a53c5c3c88",
+      "name": "Webhook",
+      "webhookId": "a49b7138-9a1d-4475-b08d-aaf8e5eb6ee6"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.message.text }},{{ $json.message.chat.id }}",
+        "messages": {
+          "messageValues": [
+            {
+              "message": "You are an AI IT Dispatcher. Analyze the user query and classify it into one of these intents:\n1. \"QUESTION\": User is asking for information, guide, how-to, or policy (e.g., \"Bagaimana cara reset VPN?\", \"Berapa kuota internet kantor?\").\n2. \"TICKET\": User is reporting a broken hardware, network down, access request, or technical error that needs IT action (e.g., \"Laptop saya mati\", \"Lupa password VPN\", \"Minta akses GitLab\").\n\nRespond ONLY with a JSON object:\n{\n  \"intent\": \"QUESTION\" | \"TICKET\"\n}"
+            }
+          ]
+        },
+        "batching": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        112,
+        -416
+      ],
+      "id": "5c54abbd-c3ff-482c-83d6-60cd17737d56",
+      "name": "Basic LLM Chain"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Mengambil string JSON dari property 'text'\nconst rawText = $input.first().json.text;\n\n// Parse string JSON menjadi JavaScript Object\nconst parsedData = JSON.parse(rawText);\n\nreturn [{\n  json: {\n    intent: parsedData.intent // Sekarang nilainya menjadi \"TICKET\" atau \"QUESTION\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        -416
+      ],
+      "id": "bbf0671c-9c8e-40d9-b309-efd997273aa7",
+      "name": "Code in JavaScript1"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Create a row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a row": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings HuggingFace Inference1": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Pinecone Vector Store1",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Pinecone Vector Store1": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ],
+      "ai_vectorStore": [
+        []
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Create a row1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain1": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model2": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Basic LLM Chain1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Basic LLM Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Basic LLM Chain": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Switch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "d5aa8dcd-939d-4aae-b9c8-a1831904ef3a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "02bc9c5a7e42c093756a333fe09ba611fd55c871e427d7f1f0a8ef7a7b25630c"
+  },
+  "nodeGroups": [],
+  "id": "hso6lS25Rzr8lKSg",
+  "tags": []
+}
