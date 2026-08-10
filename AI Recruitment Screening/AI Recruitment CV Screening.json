@@ -1,0 +1,1008 @@
+{
+  "name": "AI Recruitment CV Screening",
+  "nodes": [
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {
+          "keepSource": "json"
+        }
+      },
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        -1616,
+        96
+      ],
+      "id": "8adfb15a-c4f3-495e-953e-bc7c3ad726ef",
+      "name": "Extract from File"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Memproses SELURUH kandidat/CV yang mengalir dari node sebelumnya ($input.all())\nreturn $input.all().map((item, index) => {\n  // 1. Ambil data dari Groq Ke-2 (Semantic Matcher) yang masuk sebagai item saat ini\n  let semanticRes = {};\n  try {\n    const rawSemanticContent = item.json.choices[0].message.content;\n    semanticRes = typeof rawSemanticContent === 'string' ? JSON.parse(rawSemanticContent) : rawSemanticContent;\n  } catch (e) {\n    semanticRes = { project_relevance_score: 0, reason: \"Gagal parse semantic response\" };\n  }\n\n  // 2. Ambil data dari Groq Ke-1 (AI Resume Extraction) sesuai indeks item\n  let extractRes = {};\n  try {\n    const extractItem = $(\"Groq - AI Resume Extraction\").all()[index] || $(\"Groq - AI Resume Extraction\").item;\n    const rawExtractContent = extractItem.json.choices[0].message.content;\n    extractRes = typeof rawExtractContent === 'string' ? JSON.parse(rawExtractContent) : rawExtractContent;\n  } catch (e) {\n    extractRes = { name: \"Unknown\", email: \"Unknown\", skills: [], total_experience_years: 0, education_level: \"\" };\n  }\n\n  // 3. Ambil data Job Spec dari Google Sheets\n  const jobSpecItem = $(\"Get row(s) in sheet\").all()[index] || $(\"Get row(s) in sheet\").first() || {};\n  const jobSpec = jobSpecItem.json || {};\n\n  // 4. Ambil Teks CV Mentah (diperbaiki dari typo toLowerCas)\n  const rawCvTextItem = $(\"Extract from File\").all()[index] || $(\"Extract from File\").first() || {};\n  const rawCvText = (rawCvTextItem.json?.text || \"\").toLowerCase();\n\n  // Helper untuk membersihkan array/string\n  const cleanList = (str) => typeof str === 'string' ? str.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) : [];\n\n  // --- A. SKILL MATCH (40%) ---\n  const reqSkills = cleanList(jobSpec.Required_Skills || jobSpec.required_skills);\n  const candSkills = (extractRes.skills || []).map(s => String(s).toLowerCase());\n  let matchedSkillsCount = 0;\n\n  reqSkills.forEach(req => {\n    if (candSkills.some(cs => cs.includes(req) || req.includes(cs))) {\n      matchedSkillsCount++;\n    }\n  });\n  const skillScore = reqSkills.length > 0 ? (matchedSkillsCount / reqSkills.length) * 100 : 0;\n\n  // --- B. EXPERIENCE MATCH (25%) ---\n  const minExp = parseFloat(jobSpec.Min_Experience_Years || jobSpec.min_experience_years) || 0;\n  const candExp = parseFloat(extractRes.total_experience_years) || 0;\n  let expScore = 0;\n  if (minExp === 0) {\n    expScore = 100;\n  } else {\n    expScore = Math.min(100, (candExp / minExp) * 100);\n  }\n\n  // --- C. EDUCATION MATCH (10%) ---\n  const eduHierarchy = {\n    'high school': 1,\n    'diploma': 2,\n    'bachelor': 3,\n    'master': 4,\n    'phd': 5\n  };\n  const reqEduLevel = eduHierarchy[(jobSpec.Min_Education || jobSpec.min_education || '').toLowerCase()] || 3;\n  const candEduLevel = eduHierarchy[(extractRes.education_level || '').toLowerCase()] || 1;\n  const eduScore = candEduLevel >= reqEduLevel ? 100 : (candEduLevel / reqEduLevel) * 100;\n\n  // --- D. PROJECT RELEVANCE (15%) ---\n  const projectScore = Math.min(100, Math.max(0, parseFloat(semanticRes.project_relevance_score) || 0));\n\n  // --- E. KEYWORD MATCH (10%) ---\n  const keywords = cleanList(jobSpec.Keywords || jobSpec.keywords);\n  let matchedKwCount = 0;\n\n  keywords.forEach(kw => {\n    if (rawCvText.includes(kw)) {\n      matchedKwCount++;\n    }\n  });\n  const keywordScore = keywords.length > 0 ? (matchedKwCount / keywords.length) * 100 : 0;\n\n  // --- TOTAL DETERMINISTIC CALCULATED SCORE ---\n  const totalScore = Math.round(\n    (skillScore * 0.40) +\n    (expScore * 0.25) +\n    (eduScore * 0.10) +\n    (projectScore * 0.15) +\n    (keywordScore * 0.10)\n  );\n\n  // Threshold penentuan Strong vs Weak Match\n  const status = totalScore >= 75 ? 'Strong Match' : 'Weak Match';\n\n  return {\n    json: {\n      candidate_name: extractRes.name || 'Unknown',\n      email: extractRes.email || 'Unknown',\n      job_id: jobSpec.Job_ID || jobSpec.job_id || 'N/A',\n      job_title: jobSpec.Job_Title || jobSpec.job_title || 'N/A',\n      total_score: totalScore,\n      status: status,\n      scores_breakdown: {\n        skill_score: Math.round(skillScore),\n        exp_score: Math.round(expScore),\n        edu_score: Math.round(eduScore),\n        project_score: Math.round(projectScore),\n        keyword_score: Math.round(keywordScore)\n      },\n      semantic_reason: semanticRes.reason || '',\n      skills_found: candSkills.join(', ')\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -928,
+        336
+      ],
+      "id": "abd02cb1-5655-437f-9ef4-ba84f86caadd",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs",
+          "mode": "list",
+          "cachedResultName": "Project Test Workflow CV (Jawaban)",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1566412889,
+          "mode": "list",
+          "cachedResultName": "Sheet2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs/edit#gid=1566412889"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Candidate_Name": "={{ $json.candidate_name }}",
+            "Email": "={{ $json.email }}",
+            "Job_ID": "={{ $json.job_id }}",
+            "Total_Score": "={{ $json.total_score }}",
+            "Skill_Score": "={{ $json.scores_breakdown.skill_score }}",
+            "Exp_Score": "={{ $json.scores_breakdown.exp_score }}",
+            "Edu_Score": "={{ $json.scores_breakdown.edu_score }}",
+            "Project_Score": "={{ $json.scores_breakdown.project_score }}",
+            "Keyword_Score": "={{ $json.scores_breakdown.keyword_score }}",
+            "Status": "={{ $json.semantic_reason }}",
+            "Skills_Found": "={{ $json.skills_found }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Candidate_Name",
+              "displayName": "Candidate_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Job_ID",
+              "displayName": "Job_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Total_Score",
+              "displayName": "Total_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Skill_Score",
+              "displayName": "Skill_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Exp_Score",
+              "displayName": "Exp_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Edu_Score",
+              "displayName": "Edu_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Project_Score",
+              "displayName": "Project_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Keyword_Score",
+              "displayName": "Keyword_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "Skills_Found",
+              "displayName": "Skills_Found",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -768,
+        336
+      ],
+      "id": "dd359027-73e9-4301-905e-e86b5f5088d8",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "u23qCZIpygNO6eER",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "40196106-c95f-483b-b182-815dc39ba8a9",
+              "leftValue": "={{ $json.Total_Score }}",
+              "rightValue": 75,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        -608,
+        336
+      ],
+      "id": "9aa8b8e0-bff7-4314-b02f-f1fadb725bb9",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "operation": "sendAndWait",
+        "chatId": "8967969045",
+        "message": "=🌟 STRONG MATCH CANDIDATE FOUND! 🌟\n\nName: {{ $json.Candidate_Name }}\nJob Applied: {{ $('Google Sheets Trigger').item.json['Posisi yang di lamar'] }}({{ $json.Job_ID }})\nTotal Score: {{ $json.Total_Score }}/100\n\nBreakdown:\n- Skill Match (40%): {{ $json.Skill_Score }}%\n- Experience (25%): {{ $json.Exp_Score }}%\n- Education (10%): {{ $json.Edu_Score }}%\n- Project Relevance (15%): {{ $json.Project_Score }}%\n- Keywords (10%): {{ $json.Keyword_Score }}%\n\nAI Note: {{ $json.Status }}\n\n-----------------------------------------------\nBalas pesan ini dengan format jadwal interview:\nTanggal | Jam | Link Meeting\n\nContoh:\n15 Agustus 2026 | 10:00 WIB | https://meet.google.com/abc-defg-hij",
+        "responseType": "freeText",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        -432,
+        208
+      ],
+      "id": "8ed45e78-894c-475e-a37a-7d1e2100bbea",
+      "name": "Send message and wait for response",
+      "webhookId": "56c5bd74-1611-404d-8f14-90b4f0af064e",
+      "credentials": {
+        "telegramApi": {
+          "id": "m9Wjg2bsEwvOsO0E",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $('If').item.json.Email }}",
+        "subject": "=Undangan Interview - Posisi {{ $('Google Sheets Trigger').item.json['Posisi yang di lamar'] }} di pkjkj",
+        "message": "=<p>Halo <b>{{ $('If').item.json.Candidate_Name }}</b>,</p>  <p>Terima kasih telah melamar untuk posisi <b>{{ $('Google Sheets Trigger').item.json['Posisi yang di lamar'] }}</b>. Berdasarkan hasil evaluasi kualifikasi dan portofolio Anda, tim HR kami sangat tertarik untuk mengenal Anda lebih lanjut melalui sesi wawancara.</p>  <p>Berikut adalah detail jadwal sesi wawancara Anda:</p> <ul>   <li><b>Tanggal:</b> {{ $json.interview_date }}</li>   <li><b>Waktu:</b> {{ $json.interview_time }}</li>   <li><b>Media / Tautan:</b> <a href=\"{{ $json.meeting_link }}\">{{ $json.meeting_link }}</a></li> </ul>  <p>Mohon dapat mengonfirmasi kehadiran Anda dengan membalas email ini selambat-lambatnya 1x24 jam sebelum jadwal wawancara berlangsung.</p>  <p>Salam hangat,<br> <b>Tim Rekrutmen / HR</b></p>",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        -80,
+        208
+      ],
+      "id": "330db357-2186-4259-82b1-634dbed96ef3",
+      "name": "Send a message",
+      "webhookId": "8154ad6c-7c15-44be-9086-392f977d2c50",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "pk7HRnAQ2mub2WSd",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs",
+          "mode": "list",
+          "cachedResultName": "Project Test Workflow CV (Jawaban)",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1566412889,
+          "mode": "list",
+          "cachedResultName": "Sheet2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs/edit#gid=1566412889"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Interview": "={{ $('Send message and wait for response').item.json.data.text }}"
+          },
+          "matchingColumns": [
+            "Interview"
+          ],
+          "schema": [
+            {
+              "id": "Candidate_Name",
+              "displayName": "Candidate_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Job_ID",
+              "displayName": "Job_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Total_Score",
+              "displayName": "Total_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Skill_Score",
+              "displayName": "Skill_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Exp_Score",
+              "displayName": "Exp_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Edu_Score",
+              "displayName": "Edu_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Project_Score",
+              "displayName": "Project_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Keyword_Score",
+              "displayName": "Keyword_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Skills_Found",
+              "displayName": "Skills_Found",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Interview",
+              "displayName": "Interview",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        80,
+        208
+      ],
+      "id": "50739468-75bf-4817-bfd9-fadcf0435490",
+      "name": "Update row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "u23qCZIpygNO6eER",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs",
+          "mode": "list",
+          "cachedResultName": "Project Test Workflow CV (Jawaban)",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1566412889,
+          "mode": "list",
+          "cachedResultName": "Sheet2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs/edit#gid=1566412889"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Interview": "Tidak Lolos Screaning"
+          },
+          "matchingColumns": [
+            "Interview"
+          ],
+          "schema": [
+            {
+              "id": "Candidate_Name",
+              "displayName": "Candidate_Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Email",
+              "displayName": "Email",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Job_ID",
+              "displayName": "Job_ID",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Total_Score",
+              "displayName": "Total_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Skill_Score",
+              "displayName": "Skill_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Exp_Score",
+              "displayName": "Exp_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Edu_Score",
+              "displayName": "Edu_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Project_Score",
+              "displayName": "Project_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Keyword_Score",
+              "displayName": "Keyword_Score",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Status",
+              "displayName": "Status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Skills_Found",
+              "displayName": "Skills_Found",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "Interview",
+              "displayName": "Interview",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -432,
+        400
+      ],
+      "id": "1313a8bc-de74-4162-abca-ea797930b1d6",
+      "name": "Update row in sheet1",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "u23qCZIpygNO6eER",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Memproses seluruh item CV dan mempertahankan metadata asli\nreturn $input.all().map(item => {\n  const rawText = item.json.text || \"\";\n\n  const cleanedText = rawText\n    .replace(/[\\r\\n]+/g, \" \")\n    .replace(/\"/g, '\\\\\"')\n    .replace(/[\\u0000-\\u001F\\u007F-\\u009F]/g, \"\");\n\n  return {\n    json: {\n      ...item.json, // Tetap membawa Job_ID, Upload CV link, dll.\n      clean_text: cleanedText\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -1456,
+        96
+      ],
+      "id": "0c2dd32d-e9c1-49ff-b3ee-506e4d60ec55",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    \"model\": \"llama-3.3-70b-versatile\",\n    \"temperature\": 0.1,\n    \"response_format\": { \"type\": \"json_object\" },\n    \"messages\": [\n      {\n        \"role\": \"system\",\n        \"content\": \"You are an expert HR Resume Parser. Extract structured information from candidate CV text. Strictly return a JSON object with these keys: name (string), email (string), skills (array of strings), total_experience_years (number), education_level (string), projects_summary (string).\"\n      },\n      {\n        \"role\": \"user\",\n        \"content\": \"Below is the candidate CV text:\\n---\\n\" + ($input.item.json.clean_text || $(\"Code in JavaScript1\").item.json.clean_text || \"\") + \"\\n---\\nExtract all required fields in JSON format.\"\n      }\n    ]\n  })\n}}",
+        "options": {
+          "batching": {
+            "batch": {
+              "batchSize": 1,
+              "batchInterval": 2000
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1232,
+        336
+      ],
+      "id": "c60bcef2-e2ff-46bc-a677-edb8ef0dee7c",
+      "name": "Groq - AI Resume Extraction",
+      "retryOnFail": true,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Fdm3ZYuXWyKChqcE",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.groq.com/openai/v1/chat/completions",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{\n  JSON.stringify({\n    \"model\": \"llama-3.3-70b-versatile\",\n    \"temperature\": 0.2,\n    \"response_format\": { \"type\": \"json_object\" },\n    \"messages\": [\n      {\n        \"role\": \"system\",\n        \"content\": \"You are a Tech HR Screener. Compare the candidate's projects summary against the Target Job Summary. Evaluate how relevant the candidate's past work and projects are to the position. Strictly return a JSON object with EXACTLY these two keys: {\\\"project_relevance_score\\\": number (0 to 100), \\\"reason\\\": string (brief 1-2 sentence justification in Indonesian)}.\"\n      },\n      {\n        \"role\": \"user\",\n        \"content\": \"TARGET JOB SUMMARY:\\n\" + (($(\"Get row(s) in sheet\").item.json.Job_Summary) || \"Not specified\") + \n        \"\\n\\nCANDIDATE PROJECTS SUMMARY:\\n\" + (JSON.parse(($input.item.json.choices || $(\"Groq - AI Resume Extraction\").item.json.choices)[0].message.content).projects_summary || \"No specific projects listed\")\n      }\n    ]\n  })\n}}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -1072,
+        336
+      ],
+      "id": "83a043dc-8e84-4ecf-96ea-31c584869610",
+      "name": "Groq - Semantic Project Matcher",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "Fdm3ZYuXWyKChqcE",
+          "name": "Header Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "pollTimes": {
+          "item": []
+        },
+        "documentId": {
+          "__rl": true,
+          "value": "1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs",
+          "mode": "list",
+          "cachedResultName": "Project Test Workflow CV (Jawaban)",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 419904507,
+          "mode": "list",
+          "cachedResultName": "Form Responses 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs/edit#gid=419904507"
+        },
+        "options": {
+          "columnsToWatch": [
+            "Posisi yang di lamar",
+            "Upload CV",
+            "Email",
+            "Nama Lengkap",
+            "Job_ID"
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleSheetsTrigger",
+      "typeVersion": 1,
+      "position": [
+        -1952,
+        96
+      ],
+      "id": "6e495624-3382-410f-a5f6-ff573a846f34",
+      "name": "Google Sheets Trigger",
+      "credentials": {
+        "googleSheetsTriggerOAuth2Api": {
+          "id": "5MmK1XgkcueVD7rc",
+          "name": "Google Sheets Trigger account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs",
+          "mode": "list",
+          "cachedResultName": "Project Test Workflow CV (Jawaban)",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 306098547,
+          "mode": "list",
+          "cachedResultName": "Job_Requirements",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1kj4f-2Dkf6JhmDDSwZoY7lJFRMEL5HUUq84D2xLCeWs/edit#gid=306098547"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "Job_ID",
+              "lookupValue": "={{ $('Google Sheets Trigger').item.json.Job_ID }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        -1376,
+        336
+      ],
+      "id": "b0a48975-e807-467b-9ce3-053c32b632d7",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "u23qCZIpygNO6eER",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "download",
+        "fileId": {
+          "__rl": true,
+          "value": "={{ $json['Upload CV'].match(/[-\\w]{25,}/) ? $json['Upload CV'].match(/[-\\w]{25,}/)[0] : '' }}",
+          "mode": "id"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleDrive",
+      "typeVersion": 3,
+      "position": [
+        -1776,
+        96
+      ],
+      "id": "9f828f71-4abb-4026-9ba0-2382269fd5d0",
+      "name": "Download file",
+      "credentials": {
+        "googleDriveOAuth2Api": {
+          "id": "dTPmp85ZpzFnTQZY",
+          "name": "Google Drive account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Ambil teks balasan dari HR via Telegram\nconst hrResponse = $input.first().json.data.text || $input.item.json.text || \"\";\n\n// Split string berdasarkan karakter pipe \"|\"\nconst parts = hrResponse.split('|').map(p => p.trim());\n\nconst interviewDate = parts[0] || \"Akan diinformasikan kembali\";\nconst interviewTime = parts[1] || \"Akan diinformasikan kembali\";\nconst meetingLink = parts[2] || \"https://meet.google.com/\";\n\n// Ambil data kandidat dari item yang sedang diproses\nconst candidate = $input.item.json;\n\nreturn {\n  json: {\n    ...candidate, // Tetap membawa data kandidat sebelumnya\n    interview_date: interviewDate,\n    interview_time: interviewTime,\n    meeting_link: meetingLink\n  }\n};"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -256,
+        208
+      ],
+      "id": "48164cd2-0e6c-412d-a451-cd4aca7db349",
+      "name": "Code in JavaScript2"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Extract from File": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "Send message and wait for response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Update row in sheet1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send message and wait for response": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "Get row(s) in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - AI Resume Extraction": {
+      "main": [
+        [
+          {
+            "node": "Groq - Semantic Project Matcher",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq - Semantic Project Matcher": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Google Sheets Trigger": {
+      "main": [
+        [
+          {
+            "node": "Download file",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get row(s) in sheet": {
+      "main": [
+        [
+          {
+            "node": "Groq - AI Resume Extraction",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download file": {
+      "main": [
+        [
+          {
+            "node": "Extract from File",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript2": {
+      "main": [
+        [
+          {
+            "node": "Send a message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a message": {
+      "main": [
+        [
+          {
+            "node": "Update row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "cefb6299-5b09-40de-8e58-7beafb2e116a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "02bc9c5a7e42c093756a333fe09ba611fd55c871e427d7f1f0a8ef7a7b25630c"
+  },
+  "nodeGroups": [],
+  "id": "VfA3Ni9mumd5jD86",
+  "tags": []
+}
