@@ -2,7 +2,40 @@
 
 An end-to-end automated **AI-Powered CV Screening & Recruitment Workflow** built on **n8n**. This project automates the entire candidate evaluation pipeline: from catching new job application submissions in Google Sheets, parsing and analyzing CV documents using LLMs (Groq Llama 3.3 70B), calculating multi-factor deterministic match scores, interacting with recruiters via Telegram, to automatically sending personalized interview invitations via Gmail and updating database status.
 
----
+
+## Project Workflow
+
+```mermaid
+graph TD
+    A[Google Sheets Trigger<br/>New Job Application] --> B[Google Drive<br/>Download CV PDF]
+    B --> C[Extract from File<br/>Parse PDF Text]
+    C --> D[Code: JavaScript1<br/>Clean & Sanitize Text]
+    D --> E[Google Sheets<br/>Fetch Job Requirements]
+    E --> F[Groq API: AI Resume Extraction<br/>Llama-3.3-70b-versatile]
+    F --> G[Groq API: Semantic Project Matcher<br/>Evaluate Project Relevance]
+    G --> H[Code: JavaScript<br/>Weighted Scoring Engine]
+    H --> I[Google Sheets<br/>Append Screening Results]
+    I --> J{Total Score >= 75?}
+
+    %% Strong Match Path
+    J -- Yes (Strong Match) --> K[Telegram Bot<br/>Send Alert & Wait for HR Response]
+    K --> L[Code: JavaScript2<br/>Parse Interview Schedule]
+    L --> M[Gmail API<br/>Send Interview Email]
+    M --> N[Google Sheets<br/>Update Interview Details]
+
+    %% Weak Match Path
+    J -- No (Weak Match) --> O[Google Sheets<br/>Set Status: Tidak Lolos Screening]
+
+    %% Styling
+    style A fill:#4285F4,stroke:#333,stroke-width:1px,color:#fff
+    style F fill:#F38020,stroke:#333,stroke-width:1px,color:#fff
+    style G fill:#F38020,stroke:#333,stroke-width:1px,color:#fff
+    style K fill:#26A5E4,stroke:#333,stroke-width:1px,color:#fff
+    style M fill:#EA4335,stroke:#333,stroke-width:1px,color:#fff
+    style J fill:#f39c12,stroke:#333,stroke-width:1px,color:#fff
+
+```
+
 
 ## 🌟 Key Features
 
@@ -41,41 +74,6 @@ $$\text{Total Score} = (\text{Skill} \times 0.40) + (\text{Exp} \times 0.25) + (
 
 > **Threshold**: Score $\ge 75$ = `Strong Match` (Triggers Telegram & HR Approval Flow). Score $< 75$ = `Weak Match` (Marked as "Tidak Lolos Screening").
 
----
-
-## 🔄 Workflow Architecture & Node Flow
-
-```mermaid
-graph TD
-    A[Google Sheets Trigger<br/>New Job Application] --> B[Google Drive<br/>Download CV PDF]
-    B --> C[Extract from File<br/>Parse PDF Text]
-    C --> D[Code: JavaScript1<br/>Clean & Sanitize Text]
-    D --> E[Google Sheets<br/>Fetch Job Requirements]
-    E --> F[Groq API: AI Resume Extraction<br/>Llama-3.3-70b-versatile]
-    F --> G[Groq API: Semantic Project Matcher<br/>Evaluate Project Relevance]
-    G --> H[Code: JavaScript<br/>Weighted Scoring Engine]
-    H --> I[Google Sheets<br/>Append Screening Results]
-    I --> J{Total Score >= 75?}
-
-    %% Strong Match Path
-    J -- Yes (Strong Match) --> K[Telegram Bot<br/>Send Alert & Wait for HR Response]
-    K --> L[Code: JavaScript2<br/>Parse Interview Schedule]
-    L --> M[Gmail API<br/>Send Interview Email]
-    M --> N[Google Sheets<br/>Update Interview Details]
-
-    %% Weak Match Path
-    J -- No (Weak Match) --> O[Google Sheets<br/>Set Status: Tidak Lolos Screening]
-
-    %% Styling
-    style A fill:#4285F4,stroke:#333,stroke-width:1px,color:#fff
-    style F fill:#F38020,stroke:#333,stroke-width:1px,color:#fff
-    style G fill:#F38020,stroke:#333,stroke-width:1px,color:#fff
-    style K fill:#26A5E4,stroke:#333,stroke-width:1px,color:#fff
-    style M fill:#EA4335,stroke:#333,stroke-width:1px,color:#fff
-    style J fill:#f39c12,stroke:#333,stroke-width:1px,color:#fff
-```
-
----
 
 ## 🛠️ Tech Stack & Integrations
 
